@@ -1,0 +1,404 @@
+#include <iostream> //FOR COUT AND CIN
+#include <string> // FOR STRING DATA / VARIABLE
+#include <iomanip> // FOR NEATING THE REASULT USING SETW AD SETPRECISION
+#include <cstdlib> // FOR SYSTEM CLS USES AND RAND()
+#include <ctime> // FOR GENERATING RANDOM NUMBER (TIME(0))
+#include <fstream> // TO USE FILE INPUT (IFSTREAM) AND OUTPUT (OFSTREAM) 
+
+using namespace std;
+
+// =========================================
+// STRUCT DEFINITIONS
+// =========================================
+struct Destination {
+    double price;
+    string name;
+};
+
+struct FlightBooking {
+    int orderID;
+    int dest;
+    int tripType;
+    int sClass;
+    int pax;
+    int bank;
+
+    string destName;
+    string tripName;
+    string className;
+    string bankName;
+
+    string passengerNames[20];
+
+    double baseFareOneWay;
+    double foodTotal;
+    double drinkTotal;
+    double luggageWeight;
+    double luggageCharge;
+    double totalBill;
+    double totalPaid;
+    double balance;
+};
+
+const int MAX_DEST = 4; // GLOBAL CONSTANT
+
+// --- PROTOTYPES ---
+void displayHeader();
+int getValidChoice(int min, int max);
+int getValidIntMin(int minValue, const string& prompt);
+int getValidIntRange(int minValue, int maxValue, const string& prompt);
+double getValidDoubleMin(double minValue, const string& prompt);
+void inputPassengers(FlightBooking& b);
+void calculateTotal(FlightBooking& b);
+double processPayment(double totalBill);
+void displayReceipt(const FlightBooking& b);
+
+double orderMultipleFoodForPassenger(const string& passengerName);
+double orderMultipleDrinkForPassenger(const string& passengerName);
+
+double getLuggageLimitPerPax(int sClass);
+double getOverweightRatePerKg(int sClass);
+double handleLuggage(FlightBooking& b);
+
+int main() {
+    // FOR RANDOM NUMBER (BOOKING ID)
+    srand(time(0));
+
+    Destination destList[MAX_DEST];
+
+    // BACA FAIL INPUT
+    ifstream fin("flight_data.txt");
+    if (!fin) { // IF FILE DOESNT EXIST, THIS WILL SHOW
+        cout << ">> Error: Could not open input file 'flight_data.txt'!\n";
+        return 1;
+    }
+
+    for (int i = 0; i < MAX_DEST; i++) { // LOOP INSERT THE DATA FROM THE FILE INPUT
+        fin >> destList[i].price;
+        fin.ignore();
+        getline(fin, destList[i].name); // USE GETLINE TO READ EVEN WITH WHITESPACE/SPACES
+    }
+    fin.close();
+
+    FlightBooking b; // DEFINE AS 'b'
+    char next; // VARIABLE TO KEEP YES OR NO QUESTION
+
+    do {
+        displayHeader();
+
+        b.orderID = rand() % 90000 + 10000; // MATH FORMULA TO GENERATE RANDOM NUMBER :: REFF : LECTURE PROGRAMMING 1
+
+        // DISPLAY MENU
+        cout << "\n        --- SELECT DESTINATION ---\n";
+        for (int i = 0; i < MAX_DEST; i++) {
+            cout << (i + 1) << ". KLIA --> " << left << setw(18) << destList[i].name
+                << " (RM " << fixed << setprecision(2) << destList[i].price << ")\n";
+        }
+        cout << "Choice: ";
+        b.dest = getValidChoice(1, MAX_DEST);
+
+        // LOGIC INDEX ARRAY
+        b.baseFareOneWay = destList[b.dest - 1].price;
+        b.destName = destList[b.dest - 1].name;
+
+        // TRIP TYPE
+        cout << "\n--- TRIP TYPE ---\n"
+            << "1. One Way\n"
+            << "2. Round Trip\n"
+            << "Choice: ";
+        b.tripType = getValidChoice(1, 2);
+        b.tripName = (b.tripType == 1) ? "One Way" : "Round Trip";
+
+        // PASSENGER DETAILS
+        cout << "\n--- PASSENGER DETAILS ---\n";
+        b.pax = getValidIntRange(1, 20, "Enter Number of Passengers (1-20): ");
+
+        inputPassengers(b);
+
+        // SELECT CLASS
+        cout << "\n--- SELECT CLASS ---\n"
+            << "1. Business (+RM 150.00)\n"
+            << "2. Economy  (+RM 0.00)\n"
+            << "Choice: ";
+        b.sClass = getValidChoice(1, 2);
+        b.className = (b.sClass == 1) ? "Business" : "Economy";
+
+        system("cls");
+
+        // FOOD & DRINK
+        b.foodTotal = 0.0;
+        b.drinkTotal = 0.0;
+
+        for (int i = 0; i < b.pax; i++) {
+            cout << "\n=================================\n";
+            cout << " FOOD & DRINK ORDER BY PASSENGER\n";
+            cout << "=================================\n";
+            cout << "\n--- PASSENGER " << (i + 1) << ": " << b.passengerNames[i] << " ---\n";
+
+            b.foodTotal += orderMultipleFoodForPassenger(b.passengerNames[i]);
+            b.drinkTotal += orderMultipleDrinkForPassenger(b.passengerNames[i]);
+            system("cls");
+        }
+
+        system("cls");
+
+        // LUGGAGE
+        b.luggageCharge = handleLuggage(b);
+
+        system("cls");
+
+        // PAYMENT BANK
+        cout << "\n--- PAYMENT BANK ---\n"
+            << "1. Bank Islam\n"
+            << "2. Maybank\n"
+            << "3. RHB Bank\n"
+            << "Choice: ";
+        b.bank = getValidChoice(1, 3);
+        b.bankName = (b.bank == 1) ? "Bank Islam" : (b.bank == 2 ? "Maybank" : "RHB Bank");
+
+        calculateTotal(b);
+
+        cout << fixed << setprecision(2);
+        cout << "\nTotal Amount Due: RM " << b.totalBill << "\n";
+
+        b.totalPaid = processPayment(b.totalBill);
+        b.balance = b.totalPaid - b.totalBill;
+
+        system("cls");
+
+        displayReceipt(b);
+
+        cout << "\nBook another flight? (Y/N): ";
+        cin >> next;
+        system("cls");
+
+    } while (next == 'Y' || next == 'y');
+
+    cout << "Thank you for choosing AirAsia. Now Everyone Can Fly!\n";
+    return 0;
+}
+
+// =================================================================
+// IMPLEMENTASI FUNGSI 
+// =================================================================
+void displayHeader() {
+    cout << "\n" << string(55, '=') << "\n";
+    cout << setw(42) << right << "AIR-ASIA MOCK SYSTEM (KLIA)\n";
+    cout << string(55, '=') << "\n";
+}
+
+int getValidChoice(int min, int max) {
+    string input;
+    int choice = 0;
+    while (true) {
+        cin >> input;
+        char firstChar = input[0];
+        if (input.length() == 1 && firstChar >= '0' && firstChar <= '9') {
+            choice = firstChar - '0';
+            if (choice >= min && choice <= max)
+                return choice;
+        }
+        cout << "Invalid choice! Select between " << min << " and " << max << ": ";
+    }
+}
+
+int getValidIntMin(int minValue, const string& prompt) {
+    string input;
+    int val = 0;
+    while (true) {
+        cout << prompt;
+        getline(cin >> ws, input);
+        bool isNumber = true;
+        for (size_t i = 0; i < input.length(); i++) {
+            if (input[i] < '0' || input[i] > '9') { isNumber = false; break; }
+        }
+        if (isNumber && input.length() > 0) {
+            val = stoi(input);
+            if (val >= minValue) return val;
+            cout << "Invalid input! Minimum is " << minValue << ".\n";
+        }
+        else {
+            cout << "Invalid input! Please enter a number.\n";
+        }
+    }
+}
+
+int getValidIntRange(int minValue, int maxValue, const string& prompt) {
+    string input;
+    int val = 0;
+    while (true) {
+        cout << prompt;
+        getline(cin >> ws, input);
+        if (input.length() == 0) { cout << "Invalid input! Please enter a number.\n"; continue; }
+        bool isInteger = true;
+        for (size_t i = 0; i < input.length(); i++) {
+            if (input[i] < '0' || input[i] > '9') { 
+                isInteger = false; break; }
+        }
+        if (!isInteger) { cout << "Invalid input! No letters or decimals allowed.\n"; continue; }
+        val = 0;
+        for (size_t i = 0; i < input.length(); i++) val = val * 10 + (input[i] - '0');
+        if (val >= minValue && val <= maxValue) return val;
+        cout << "Invalid input! Enter value between " << minValue << " and " << maxValue << ".\n";
+    }
+}
+
+double getValidDoubleMin(double minValue, const string& prompt) {
+    string input;
+    double val = 0.0;
+    while (true) {
+        cout << prompt;
+        getline(cin >> ws, input);
+        bool isDouble = true;
+        int decimalCount = 0;
+        for (size_t i = 0; i < input.length(); i++) {
+            if (input[i] == '.') {
+                decimalCount++;
+                if (decimalCount > 1) { isDouble = false; break; }
+            }
+            else if (input[i] < '0' || input[i] > '9') { isDouble = false; break; }
+        }
+        if (isDouble && input.length() > 0 && input != ".") {
+            val = stod(input);
+            if (val >= minValue) return val;
+            cout << "Invalid input! Minimum is " << minValue << ".\n";
+        }
+        else {
+            cout << "Invalid input! Please enter a numeric value.\n";
+        }
+    }
+}
+
+void inputPassengers(FlightBooking& b) {
+    for (int i = 0; i < b.pax; i++) {
+        cout << "Passenger " << (i + 1) << " Name (Single Word): ";
+        cin >> b.passengerNames[i];
+    }
+}
+
+double orderMultipleFoodForPassenger(const string& passengerName) {
+    double total = 0.0;
+    int choice;
+    cout << "\n--- FOOD MENU (for " << passengerName << ") ---\n";
+    while (true) {
+        cout << "1. Nasi Lemak   (RM 15.00)\n" << "2. Chicken Rice (RM 12.00)\n" << "3. Pasta        (RM 18.00)\n" << "4. Done\nChoice: ";
+        choice = getValidChoice(1, 4);
+        if (choice == 4) break;
+        int qty = getValidIntMin(1, "Quantity: ");
+        double price = 0.0;
+        if (choice == 1) price = 15.00;
+        else if (choice == 2) price = 12.00;
+        else if (choice == 3) price = 18.00;
+        total += price * qty;
+        cout << "\n>> Added. Current FOOD total for " << passengerName << ": RM " << fixed << setprecision(2) << total << "\n\n";
+    }
+    return total;
+}
+
+double orderMultipleDrinkForPassenger(const string& passengerName) {
+    double total = 0.0;
+    int choice;
+    cout << "\n--- DRINK MENU (for " << passengerName << ") ---\n";
+    while (true) {
+        cout << "1. Coffee (RM 7.00)\n" << "2. Water  (RM 3.00)\n" << "3. Done\nChoice: ";
+        choice = getValidChoice(1, 3);
+        if (choice == 3) break;
+        int qty = getValidIntMin(1, "Quantity: ");
+        double price = (choice == 1) ? 7.00 : 3.00;
+        total += price * qty;
+        cout << "\n>> Added. Current DRINK total for " << passengerName << ": RM " << fixed << setprecision(2) << total << "\n\n";
+    }
+    return total;
+}
+
+double getLuggageLimitPerPax(int sClass) { 
+    return (sClass == 1) ? 30.0 : 20.0; }
+
+double getOverweightRatePerKg(int sClass) { 
+    return (sClass == 1) ? 12.0 : 10.0; }
+
+double handleLuggage(FlightBooking& b) {
+    char hasLuggage;
+    b.luggageWeight = 0.0;
+    cout << "\n--- LUGGAGE OPTION ---\nDo you have check-in luggage? (Y/N): ";
+    cin >> hasLuggage;
+    if (!(hasLuggage == 'Y' || hasLuggage == 'y')) { cout << ">> No check-in luggage selected.\n"; return 0.0; }
+    double limitPerPax = getLuggageLimitPerPax(b.sClass);
+    double totalLimit = limitPerPax * b.pax;
+    double ratePerKg = getOverweightRatePerKg(b.sClass);
+    b.luggageWeight = getValidDoubleMin(0.0, "Enter TOTAL luggage weight for ALL passengers (kg): ");
+    if (b.luggageWeight <= totalLimit) { cout << ">> Luggage accepted. No extra charge.\n"; return 0.0; }
+    while (b.luggageWeight > totalLimit) {
+        double excess = b.luggageWeight - totalLimit;
+        double charge = excess * ratePerKg;
+        cout << fixed << setprecision(2);
+        cout << "\n!! OVERWEIGHT ALERT !!\n" << "Total Weight : " << b.luggageWeight << "kg\n" << "Free Limit   : " << totalLimit << "kg\n" << "Excess       : " << excess << "kg\n" << "Charge Rate  : RM " << ratePerKg << " / kg\n" << "Extra Charge : RM " << charge << "\n";
+        cout << "\nDo you want to PAY the extra charge? (Y/N): ";
+        char pay; cin >> pay;
+        if (pay == 'Y' || pay == 'y') { cout << ">> Overweight payment accepted.\n"; return charge; }
+        else {
+            cout << ">> Please reduce weight to " << totalLimit << "kg or below.\n";
+            b.luggageWeight = getValidDoubleMin(0.0, "Enter NEW total luggage weight (kg): ");
+            if (b.luggageWeight <= totalLimit) { cout << ">> Weight reduced successfully. No extra charge.\n"; return 0.0; }
+        }
+    }
+    return 0.0;
+}
+
+void calculateTotal(FlightBooking& b) {
+    double classExtra = (b.sClass == 1) ? 150.00 : 0.0;
+    double tripMultiplier = (b.tripType == 2) ? 2.0 : 1.0;
+    double basePart = (b.baseFareOneWay * tripMultiplier + classExtra) * b.pax;
+    double addOns = b.foodTotal + b.drinkTotal + b.luggageCharge;
+    b.totalBill = basePart + addOns;
+}
+
+double processPayment(double totalBill) {
+    double payment, totalPaid = 0;
+    while (totalPaid < totalBill) {
+        cout << "Enter Payment Amount (Remaining: RM " << fixed << setprecision(2) << (totalBill - totalPaid) << "): RM ";
+        cin >> payment; totalPaid += payment;
+        if (totalPaid < totalBill) cout << ">> Insufficient amount! Please pay more.\n";
+    }
+    return totalPaid;
+}
+
+// =================================================================
+// FUNGSI RESIT 
+// =================================================================
+void displayReceipt(const FlightBooking& b) {
+    int w = 18; int padding = w + 2;
+    double tripMultiplier = (b.tripName == "Round Trip") ? 2.0 : 1.0;
+    double baseTotal = b.baseFareOneWay * tripMultiplier * b.pax;
+
+    // --- BAHAGIAN 1: PAPAR PADA SKRIN (Guna Susunan Kemas) ---
+    cout << "\n" << string(55, '=') << "\n" << setw(35) << right << "OFFICIAL RECEIPT\n" << " Thank you for choosing AirAsia. Now Everyone Can Fly!\n" << string(55, '=') << "\n";
+    cout << left << setw(w) << "Order ID" << ": #" << b.orderID << "\n" << left << setw(w) << "Passenger" << ": ";
+    for (int i = 0; i < b.pax; i++) {
+        if (i > 0) cout << string(padding, ' ');
+        cout << (i + 1) << ". " << b.passengerNames[i] << "\n";
+    }
+    cout << left << setw(w) << "Pax" << ": " << b.pax << "\n" << left << setw(w) << "Destination" << ": " << b.destName << "\n" << left << setw(w) << "Trip Type" << ": " << b.tripName << "\n" << left << setw(w) << "Class" << ": " << b.className << "\n" << left << setw(w) << "Bank Used" << ": " << b.bankName << "\n" << string(55, '-') << "\n";
+    cout << fixed << setprecision(2) << left << setw(w) << "Base Fare" << ": RM " << baseTotal << "\n" << left << setw(w) << "Food Total" << ": RM " << b.foodTotal << "\n" << left << setw(w) << "Drink Total" << ": RM " << b.drinkTotal << "\n" << left << setw(w) << "Luggage (kg)" << ": " << b.luggageWeight << "\n" << left << setw(w) << "Luggage Fee" << ": RM " << b.luggageCharge << "\n" << string(55, '-') << "\n" << left << setw(w) << "TOTAL BILL" << ": RM " << b.totalBill << "\n" << left << setw(w) << "PAID" << ": RM " << b.totalPaid << "\n" << left << setw(w) << "BALANCE" << ": RM " << b.balance << "\n" << string(55, '=') << "\n";
+
+    // --- BAHAGIAN 2: SIMPAN FAIL 
+    ofstream fout("receipt1.txt");
+    if (!fout) {
+        cout << ">> Error: Could not write to file 'receipt1.txt'.\n";
+    }
+    else {
+
+        fout << "\n" << string(55, '=') << "\n" << setw(35) << right << "OFFICIAL RECEIPT\n" << " Thank you for choosing AirAsia. Now Everyone Can Fly!\n" << string(55, '=') << "\n";
+        fout << left << setw(w) << "Order ID" << ": #" << b.orderID << "\n" << left << setw(w) << "Passenger" << ": ";
+        for (int i = 0; i < b.pax; i++) {
+            if (i > 0) fout << string(padding, ' ');
+            fout << (i + 1) << ". " << b.passengerNames[i] << "\n";
+        }
+        fout << left << setw(w) << "Pax" << ": " << b.pax << "\n" << left << setw(w) << "Destination" << ": " << b.destName << "\n" << left << setw(w) << "Trip Type" << ": " << b.tripName << "\n" << left << setw(w) << "Class" << ": " << b.className << "\n" << left << setw(w) << "Bank Used" << ": " << b.bankName << "\n" << string(55, '-') << "\n";
+        fout << fixed << setprecision(2) << left << setw(w) << "Base Fare" << ": RM " << baseTotal << "\n" << left << setw(w) << "Food Total" << ": RM " << b.foodTotal << "\n" << left << setw(w) << "Drink Total" << ": RM " << b.drinkTotal << "\n" << left << setw(w) << "Luggage (kg)" << ": " << b.luggageWeight << "\n" << left << setw(w) << "Luggage Fee" << ": RM " << b.luggageCharge << "\n" << string(55, '-') << "\n" << left << setw(w) << "TOTAL BILL" << ": RM " << b.totalBill << "\n" << left << setw(w) << "PAID" << ": RM " << b.totalPaid << "\n" << left << setw(w) << "BALANCE" << ": RM " << b.balance << "\n" << string(55, '=') << "\n";
+
+
+        fout.close();
+        cout << ">> Copy successfully saved to 'receipt1.txt'!\n";
+    }
+}
